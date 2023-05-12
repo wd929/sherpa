@@ -95,7 +95,8 @@ class FrameReducer(torch.nn.Module):
         """
         N, T, C = x.size()
 
-        padding_mask = make_pad_mask(x_lens)
+        #padding_mask = make_pad_mask(x_lens)
+        padding_mask = make_pad_mask(x_lens, x.size(1))
         left = ctc_output[:, :, blank_id] < math.log(0.9)
         non_blank_mask = torch.logical_and(left.to(x.device), (~padding_mask))
         #non_blank_mask = left * (~padding_mask)
@@ -211,7 +212,7 @@ class TritonPythonModel:
             # Perform inference on the request and append it to responses list...
             in_0 = pb_utils.get_input_tensor_by_name(request, "x")
             in_1 = pb_utils.get_input_tensor_by_name(request, "x_lens")
-            
+
             batch_encoder_out_list.append(from_dlpack(in_0.to_dlpack()))
             encoder_max_len = max(encoder_max_len, batch_encoder_out_list[-1].shape[1])
 
@@ -236,7 +237,6 @@ class TritonPythonModel:
             st += b
 
         in_tensor_0 = pb_utils.Tensor.from_dlpack("encoder_out", to_dlpack(encoder_out))
-
         inference_request = pb_utils.InferenceRequest(
             model_name='ctc_model',
             requested_output_names=['ctc_output'],
@@ -265,13 +265,17 @@ class TritonPythonModel:
             lconv_out = pb_utils.get_output_tensor_by_name(inference_response, 'lconv_out')
             lconv_out = from_dlpack(lconv_out.to_dlpack())
 
-        out, out_lens = self.frame_reducer(encoder_out, encoder_out_lens, ctc_out)
+        out, out_lens = self.frame_reducer(lconv_out, encoder_out_lens, ctc_out)
+
+        out = out.cpu()
+        out_lens = out_lens.cpu()
 
         st = 0
         responses = []
         for b in batchsize_lists:
             speech = out[st:st+b]
             speech_lengths = out_lens[st:st+b]
+
             out0 = pb_utils.Tensor.from_dlpack("out", to_dlpack(speech))
             out1 = pb_utils.Tensor.from_dlpack("out_lens",
                                                to_dlpack(speech_lengths))
