@@ -15,6 +15,7 @@
 import triton_python_backend_utils as pb_utils
 from torch.utils.dlpack import to_dlpack, from_dlpack
 import torch
+from torch import from_numpy
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
@@ -213,10 +214,10 @@ class TritonPythonModel:
             in_0 = pb_utils.get_input_tensor_by_name(request, "x")
             in_1 = pb_utils.get_input_tensor_by_name(request, "x_lens")
 
-            batch_encoder_out_list.append(from_dlpack(in_0.to_dlpack()))
+            batch_encoder_out_list.append(from_numpy(in_0.as_numpy()))
             encoder_max_len = max(encoder_max_len, batch_encoder_out_list[-1].shape[1])
 
-            cur_b_lens = from_dlpack(in_1.to_dlpack())
+            cur_b_lens = from_numpy(in_1.as_numpy())
 
             batch_encoder_lens_list.append(cur_b_lens)
             cur_batchsize = cur_b_lens.shape[0]
