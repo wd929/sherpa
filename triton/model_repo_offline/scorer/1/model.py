@@ -9,7 +9,8 @@ from torch.utils.dlpack import from_dlpack, to_dlpack
 import sentencepiece as spm
 from icefall.lexicon import Lexicon
 
-from search import greedy_search
+from search import greedy_search, fast_beam_search
+import k2
 
 class TritonPythonModel:
     """Your Python model must use the same class name. Every Python model
@@ -70,6 +71,16 @@ class TritonPythonModel:
             parameters[key] = value["string_value"]
         self.context_size = int(parameters['context_size'])
         self.decoding_method = parameters['decoding_method']
+        if self.decoding_method == 'fast_beam_search':
+            # parameters for fast beam search
+            self.beam = int(self.model_config['parameters']['beam'])
+            self.max_contexts = int(self.model_config['parameters']['max_contexts'])
+            self.max_states = int(self.model_config['parameters']['max_states'])
+            self.temperature = float(self.model_config['parameters']['temperature'])
+            # Support fast beam search one best currently
+            self.decoding_graph = k2.trivial_graph(
+                    self.vocab_size - 1, device=self.device
+                )
         if 'bpe' in parameters['tokenizer_file']:
             sp = spm.SentencePieceProcessor()
             sp.load(parameters['tokenizer_file'])
@@ -140,6 +151,8 @@ class TritonPythonModel:
     
         if self.decoding_method == 'greedy_search':
             ans = greedy_search(encoder_out, encoder_out_lens, self.context_size, self.unk_id, self.blank_id)
+        elif self.decoding_method == 'fast_beam_search':
+            ans = fast_beam_search(encoder_out, encoder_out_lens, self.context_size, self.vocab_size, self.beam, self.max_contexts, self.max_states, self.decoding_graph)
         else:
             raise NotImplementedError
 
